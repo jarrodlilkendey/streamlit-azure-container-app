@@ -52,6 +52,15 @@ terraform init
 terraform apply -var-file="dev.tfvars"
 ```
 
+### Push Docker Image to ECR
+
+```
+aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws/<publicECRAlias>
+docker build -t streamlit .
+docker tag streamlit:latest public.ecr.aws/<publicECRAlias>/streamlit:latest
+docker push public.ecr.aws/<publicECRAlias>/streamlit:latest
+```
+
 ### Clean Up Infra
 
 ```

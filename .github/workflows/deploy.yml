@@ -1,0 +1,68 @@
+name: Build, Push to Public ECR & Deploy to ACA
+
+on:
+  push:
+    branches: ["main"]
+
+env:
+  AWS_ECR_REGISTRY_ALIAS: "s7l5z3z1"
+  AWS_ECR_REPOSITORY_NAME: "streamlit"
+  AWS_REGION: "us-east-1"
+  AWS_ECR_REPOSITORY_URI: public.ecr.aws/s7l5z3z1/streamlit
+  AZURE_RESOURCE_GROUP: streamlit-app-rg
+  AZURE_CONTAINERAPPS_ENVIRONMENT: streamlit-app-aca-env
+  AZURE_CONTAINERAPPS_APP: streamlit-app-aca
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build:
+    name: Build Docker Image and Push to Elastic Container Registry repository
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR Public
+        id: login-ecr-public
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
+
+      - name: Build, tag, and push docker image to Amazon ECR Public
+        env:
+          REGISTRY: ${{ steps.login-ecr-public.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $REGISTRY/$AWS_ECR_REGISTRY_ALIAS/$AWS_ECR_REPOSITORY_NAME:$IMAGE_TAG -t $REGISTRY/$AWS_ECR_REGISTRY_ALIAS/$AWS_ECR_REPOSITORY_NAME:latest .
+          docker push $REGISTRY/$AWS_ECR_REGISTRY_ALIAS/$AWS_ECR_REPOSITORY_NAME:$IMAGE_TAG
+          docker push $REGISTRY/$AWS_ECR_REGISTRY_ALIAS/$AWS_ECR_REPOSITORY_NAME:latest
+
+  deploy:
+    name: Deploy to Azure Container Apps
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to Azure Container Apps
+        uses: Azure/container-apps-deploy-action@v2
+        with:
+          resourceGroup: ${{ env.AZURE_RESOURCE_GROUP }}
+          containerAppName: ${{ env.AZURE_CONTAINERAPPS_APP }}
+          imageToDeploy: "${{ env.AWS_ECR_REPOSITORY_URI }}:${{ github.sha }}"

@@ -1,0 +1,8 @@
+/.venv
+*.tfvars
+.terraform/
+.terraform.lock.hcl
+*.tfstate*
+*.secrets
+/certs
+.env
